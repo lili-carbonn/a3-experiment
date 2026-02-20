@@ -4,18 +4,9 @@
 <script type="module">
 
 import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
-
-/* ===============================
-   CONFIG
-=================================*/
-
 const CONDITIONS = ["bar","pie","stacked"];
 const TRIALS_PER_CONDITION = 20;
 const N_POINTS = 10;
-
-/* ===============================
-   STATE
-=================================*/
 
 let state = {
   pid: "",
@@ -24,10 +15,6 @@ let state = {
   current: null,
   results: []
 };
-
-/* ===============================
-   BASIC STYLING
-=================================*/
 
 d3.select("body")
   .style("font-family","system-ui, sans-serif")
@@ -40,10 +27,6 @@ const container = d3.select("#container")
   .style("max-width","820px")
   .style("margin","0 auto");
 
-/* ===============================
-   UI SETUP
-=================================*/
-
 const title = container.append("h1")
   .text("Visualization Perception Study");
 
@@ -54,8 +37,6 @@ const startDiv = container.append("div");
 const trialDiv = container.append("div").style("display","none");
 const endDiv   = container.append("div").style("display","none");
 
-/* ----- START SCREEN ----- */
-
 startDiv.append("label").text("Participant ID: ");
 const pidInput = startDiv.append("input").attr("type","text");
 
@@ -64,7 +45,7 @@ startDiv.append("button")
   .style("margin-left","10px")
   .on("click", start);
 
-/* ----- TRIAL SCREEN ----- */
+
 
 const progress = trialDiv.append("div");
 
@@ -88,7 +69,6 @@ trialDiv.append("button")
   .style("margin-left","10px")
   .on("click", submit);
 
-/* ----- END SCREEN ----- */
 
 endDiv.append("button")
   .text("Copy CSV")
@@ -106,9 +86,7 @@ const csvOut = endDiv.append("textarea")
   .style("height","200px")
   .style("margin-top","15px");
 
-/* ===============================
-   UTILITIES
-=================================*/
+
 
 function randInt(min,max){
   return Math.floor(Math.random()*(max-min+1))+min;
@@ -129,9 +107,6 @@ function log2Error(trueP, reported){
   return Math.log2(hi/lo);
 }
 
-/* ===============================
-   STIMULUS GENERATION
-=================================*/
 
 function generateStimulus(){
   while(true){
@@ -152,9 +127,6 @@ function generateStimulus(){
   }
 }
 
-/* ===============================
-   EXPERIMENT FLOW
-=================================*/
 
 function buildQueue(){
   let q=[];
@@ -234,9 +206,6 @@ function toCSV(rows){
   return out;
 }
 
-/* ===============================
-   RENDERING
-=================================*/
 
 function clear(){ svg.selectAll("*").remove(); }
 
@@ -247,7 +216,6 @@ function render(condition,stim){
   if(condition==="stacked") renderStacked(stim);
 }
 
-/* ---- BAR ---- */
 
 function renderBar(stim){
   const margin={top:20,left:40,right:20,bottom:30};
@@ -293,7 +261,6 @@ function markBar(g,x,y,stim){
     .attr("text-anchor","middle").attr("font-weight",700).text("B");
 }
 
-/* ---- PIE ---- */
 
 function renderPie(stim){
   const radius=150;
@@ -327,7 +294,6 @@ function renderPie(stim){
   });
 }
 
-/* ---- STACKED ---- */
 
 function renderStacked(stim){
   const total=d3.sum(stim.values);
