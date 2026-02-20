@@ -1,9 +1,372 @@
 <!DOCTYPE html>
 <div id="container"></div>
+
 <script type="module">
 
 import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
 
-console.log(d3);
+/* ===============================
+   CONFIG
+=================================*/
+
+const CONDITIONS = ["bar","pie","stacked"];
+const TRIALS_PER_CONDITION = 20;
+const N_POINTS = 10;
+
+/* ===============================
+   STATE
+=================================*/
+
+let state = {
+  pid: "",
+  trialQueue: [],
+  trialIndex: 0,
+  current: null,
+  results: []
+};
+
+/* ===============================
+   BASIC STYLING
+=================================*/
+
+d3.select("body")
+  .style("font-family","system-ui, sans-serif")
+  .style("background","#ffffff")
+  .style("margin","0")
+  .style("padding","24px")
+  .style("color","#000");
+
+const container = d3.select("#container")
+  .style("max-width","820px")
+  .style("margin","0 auto");
+
+/* ===============================
+   UI SETUP
+=================================*/
+
+const title = container.append("h1")
+  .text("Visualization Perception Study");
+
+container.append("p")
+  .text("Task: What percentage is the smaller of the larger?");
+
+const startDiv = container.append("div");
+const trialDiv = container.append("div").style("display","none");
+const endDiv   = container.append("div").style("display","none");
+
+/* ----- START SCREEN ----- */
+
+startDiv.append("label").text("Participant ID: ");
+const pidInput = startDiv.append("input").attr("type","text");
+
+startDiv.append("button")
+  .text("Start")
+  .style("margin-left","10px")
+  .on("click", start);
+
+/* ----- TRIAL SCREEN ----- */
+
+const progress = trialDiv.append("div");
+
+const svg = trialDiv.append("svg")
+  .attr("width",800)
+  .attr("height",420)
+  .style("display","block")
+  .style("margin-top","20px");
+
+trialDiv.append("div")
+  .style("margin-top","15px")
+  .html("Answer (%): ");
+
+const answerInput = trialDiv.append("input")
+  .attr("type","number")
+  .attr("min",1)
+  .attr("max",99);
+
+trialDiv.append("button")
+  .text("Submit")
+  .style("margin-left","10px")
+  .on("click", submit);
+
+/* ----- END SCREEN ----- */
+
+endDiv.append("button")
+  .text("Copy CSV")
+  .on("click", () => {
+    navigator.clipboard.writeText(csvOut.node().value);
+  });
+
+endDiv.append("button")
+  .text("Restart")
+  .style("margin-left","10px")
+  .on("click", () => location.reload());
+
+const csvOut = endDiv.append("textarea")
+  .style("width","100%")
+  .style("height","200px")
+  .style("margin-top","15px");
+
+/* ===============================
+   UTILITIES
+=================================*/
+
+function randInt(min,max){
+  return Math.floor(Math.random()*(max-min+1))+min;
+}
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function log2Error(trueP, reported){
+  if(trueP===reported) return 0;
+  const hi=Math.max(trueP,reported);
+  const lo=Math.min(trueP,reported);
+  return Math.log2(hi/lo);
+}
+
+/* ===============================
+   STIMULUS GENERATION
+=================================*/
+
+function generateStimulus(){
+  while(true){
+    const values=Array.from({length:N_POINTS},()=>randInt(1,100));
+
+    let i=randInt(0,N_POINTS-1);
+    let j=randInt(0,N_POINTS-1);
+    while(j===i) j=randInt(0,N_POINTS-1);
+
+    const a=values[i], b=values[j];
+    const smaller=Math.min(a,b);
+    const larger=Math.max(a,b);
+    const trueP=Math.round((smaller/larger)*100);
+
+    if(trueP>5 && trueP<95){
+      return {values,i,j,a,b,trueP};
+    }
+  }
+}
+
+/* ===============================
+   EXPERIMENT FLOW
+=================================*/
+
+function buildQueue(){
+  let q=[];
+  CONDITIONS.forEach(c=>{
+    for(let t=0;t<TRIALS_PER_CONDITION;t++){
+      q.push({condition:c});
+    }
+  });
+  return shuffle(q);
+}
+
+function start(){
+  const pid = pidInput.node().value.trim();
+  if(!pid) return alert("Enter Participant ID");
+
+  state = {
+    pid,
+    trialQueue: buildQueue(),
+    trialIndex: 0,
+    current: null,
+    results: []
+  };
+
+  startDiv.style("display","none");
+  trialDiv.style("display","block");
+
+  nextTrial();
+}
+
+function nextTrial(){
+  if(state.trialIndex>=state.trialQueue.length){
+    endExperiment();
+    return;
+  }
+
+  answerInput.node().value="";
+  progress.text(`Trial ${state.trialIndex+1} of ${state.trialQueue.length}`);
+
+  const qItem=state.trialQueue[state.trialIndex];
+  state.current=generateStimulus();
+  render(qItem.condition,state.current);
+}
+
+function submit(){
+  const val=Math.round(Number(answerInput.node().value));
+  if(!Number.isFinite(val)||val<1||val>99) return;
+
+  const qItem=state.trialQueue[state.trialIndex];
+  const stim=state.current;
+
+  state.results.push({
+    participant: state.pid,
+    trial: state.trialIndex+1,
+    condition: qItem.condition,
+    truePercent: stim.trueP,
+    reportedPercent: val,
+    log2Error: log2Error(stim.trueP,val)
+  });
+
+  state.trialIndex++;
+  nextTrial();
+}
+
+function endExperiment(){
+  trialDiv.style("display","none");
+  endDiv.style("display","block");
+  csvOut.node().value = toCSV(state.results);
+}
+
+function toCSV(rows){
+  if(!rows.length) return "";
+  const headers=Object.keys(rows[0]);
+  let out=headers.join(",")+"\n";
+  rows.forEach(r=>{
+    out+=headers.map(h=>r[h]).join(",")+"\n";
+  });
+  return out;
+}
+
+/* ===============================
+   RENDERING
+=================================*/
+
+function clear(){ svg.selectAll("*").remove(); }
+
+function render(condition,stim){
+  clear();
+  if(condition==="bar") renderBar(stim);
+  if(condition==="pie") renderPie(stim);
+  if(condition==="stacked") renderStacked(stim);
+}
+
+/* ---- BAR ---- */
+
+function renderBar(stim){
+  const margin={top:20,left:40,right:20,bottom:30};
+  const innerW=800-margin.left-margin.right;
+  const innerH=420-margin.top-margin.bottom;
+
+  const g=svg.append("g")
+    .attr("transform",`translate(${margin.left},${margin.top})`);
+
+  const x=d3.scaleBand()
+    .domain(d3.range(stim.values.length))
+    .range([0,innerW])
+    .padding(0.2);
+
+  const y=d3.scaleLinear()
+    .domain([0,100])
+    .range([innerH,0]);
+
+  g.selectAll("rect")
+    .data(stim.values.map((v,i)=>({v,i})))
+    .join("rect")
+    .attr("x",d=>x(d.i))
+    .attr("y",d=>y(d.v))
+    .attr("width",x.bandwidth())
+    .attr("height",d=>innerH-y(d.v))
+    .attr("fill","#ddd")
+    .attr("stroke","#000")
+    .attr("stroke-width",d=>(d.i===stim.i||d.i===stim.j)?3:1);
+
+  markBar(g,x,y,stim);
+}
+
+function markBar(g,x,y,stim){
+  const ax=x(stim.i)+x.bandwidth()/2;
+  const ay=y(stim.a)-6;
+  const bx=x(stim.j)+x.bandwidth()/2;
+  const by=y(stim.b)-6;
+
+  g.append("text").attr("x",ax).attr("y",ay)
+    .attr("text-anchor","middle").attr("font-weight",700).text("A");
+
+  g.append("text").attr("x",bx).attr("y",by)
+    .attr("text-anchor","middle").attr("font-weight",700).text("B");
+}
+
+/* ---- PIE ---- */
+
+function renderPie(stim){
+  const radius=150;
+
+  const g=svg.append("g")
+    .attr("transform","translate(400,210)");
+
+  const pie=d3.pie().value(d=>d.v).sort(null);
+  const arc=d3.arc().innerRadius(0).outerRadius(radius);
+
+  const arcs=pie(stim.values.map((v,i)=>({v,i})));
+
+  g.selectAll("path")
+    .data(arcs)
+    .join("path")
+    .attr("d",arc)
+    .attr("fill","#ddd")
+    .attr("stroke","#000")
+    .attr("stroke-width",d=>(d.data.i===stim.i||d.data.i===stim.j)?3:1);
+
+  arcs.forEach(d=>{
+    if(d.data.i===stim.i||d.data.i===stim.j){
+      const [x,y]=arc.centroid(d);
+      g.append("text")
+        .attr("x",x*1.3)
+        .attr("y",y*1.3)
+        .attr("text-anchor","middle")
+        .attr("font-weight",700)
+        .text(d.data.i===stim.i?"A":"B");
+    }
+  });
+}
+
+/* ---- STACKED ---- */
+
+function renderStacked(stim){
+  const total=d3.sum(stim.values);
+
+  const x=d3.scaleLinear()
+    .domain([0,total])
+    .range([40,760]);
+
+  let cum=0;
+  const segs=stim.values.map((v,i)=>{
+    const start=cum;
+    cum+=v;
+    return {i,v,start,end:cum};
+  });
+
+  const y=210-30;
+  const h=60;
+
+  svg.selectAll("rect")
+    .data(segs)
+    .join("rect")
+    .attr("x",d=>x(d.start))
+    .attr("y",y)
+    .attr("width",d=>x(d.end)-x(d.start))
+    .attr("height",h)
+    .attr("fill","#ddd")
+    .attr("stroke","#000")
+    .attr("stroke-width",d=>(d.i===stim.i||d.i===stim.j)?3:1);
+
+  segs.forEach(s=>{
+    if(s.i===stim.i||s.i===stim.j){
+      svg.append("text")
+        .attr("x",x((s.start+s.end)/2))
+        .attr("y",y-10)
+        .attr("text-anchor","middle")
+        .attr("font-weight",700)
+        .text(s.i===stim.i?"A":"B");
+    }
+  });
+}
 
 </script>
