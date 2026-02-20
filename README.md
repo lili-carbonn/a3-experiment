@@ -2,6 +2,8 @@ Assignment 3 - Experiment
 
 Arjun Bhat, Leala Carbonneau, Jake DePietro, Krish Desai
 
+Github Pages: https://lili-carbonn.github.io/a3-experiment/
+
 Description: 
 This project implements a browser-based visualization perception experiment that measures how accurately participants estimate ratios across different chart types. On each trial, participants view one of three visualizations (bar chart, pie chart, or stacked bar chart) displaying ten randomly generated values, with two values highlighted as A and B. The task is to estimate what percentage the smaller value is of the larger. The experiment records responses, computes log2 error, and exports results as a CSV for analysis. 
 
